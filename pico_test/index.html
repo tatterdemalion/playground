@@ -1,0 +1,22 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Pico Example</title>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="/pico/client.js"></script>
+    <script>
+        pico.load("example");
+    </script>
+</head>
+<body>
+  <p id="message"></p>
+  <input type="text" id="my_name" placeholder="insert your name" />
+  <script>
+  $('#my_name').keyup(function() {
+    example.hello($(this).val(), function(response){
+      $('#message').html(response);  
+    });
+  });
+  </script>
+</body>
+</html>

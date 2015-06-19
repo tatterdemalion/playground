@@ -1,0 +1,9 @@
+{
+	"name": "web",
+	"description": "A simple vibe.d server application.",
+	"copyright": "Copyright © 2014, macellan",
+	"authors": ["macellan"],
+	"dependencies": {
+		"vibe-d": ">=0.7.17"
+	}
+}
