@@ -1,30 +1,37 @@
 import time
+import argparse
 from game.ai.environment import UrEnvironment
-from game.ai.bots import RandomBot, GreedyBot
+from game.ai import bots
 
 
-def run_simulation(num_games=1000):
+def run_simulation(bot_class_1, bot_class_2, num_games=1000):
     env = UrEnvironment()
 
-    random_bot = RandomBot()
-    greedy_bot = GreedyBot()
+    bot_a = bot_class_1()
+    bot_b = bot_class_2()
+
+    # Handle naming, especially if pitting the same bot classes against each other
+    name_a = bot_class_1.__name__
+    name_b = bot_class_2.__name__
+    if name_a == name_b:
+        name_a, name_b = f"{name_a}_1", f"{name_b}_2"
 
     results = {
-        "RandomBot": {"wins": 0, "total_turns": 0},
-        "GreedyBot": {"wins": 0, "total_turns": 0}
+        name_a: {"wins": 0, "total_turns": 0},
+        name_b: {"wins": 0, "total_turns": 0}
     }
 
     start_time = time.time()
-    print(f"Starting simulation of {num_games} games...")
+    print(f"Starting simulation of {num_games} games between {name_a} and {name_b}...")
 
     for i in range(num_games):
         # Swap who goes first halfway through to be fair
         if i < num_games // 2:
-            bots = {0: random_bot, 1: greedy_bot}
-            p1_name, p2_name = "RandomBot", "GreedyBot"
+            players = {0: bot_a, 1: bot_b}
+            names = {0: name_a, 1: name_b}
         else:
-            bots = {0: greedy_bot, 1: random_bot}
-            p1_name, p2_name = "GreedyBot", "RandomBot"
+            players = {0: bot_b, 1: bot_a}
+            names = {0: name_b, 1: name_a}
 
         state, valid_moves, done, _ = env.reset()
         turns = 0
@@ -32,15 +39,14 @@ def run_simulation(num_games=1000):
         while not done:
             turns += 1
             active_player_idx = env.game.current_idx
-            active_bot = bots[active_player_idx]
+            active_bot = players[active_player_idx]
             active_player = env.game.current_player
 
             chosen_piece = active_bot.choose_move(state, valid_moves, active_player)
             state, valid_moves, reward, done = env.step(chosen_piece)
 
-        # Game over, record stats
         winner_idx = 0 if env.game.players[0].has_won() else 1
-        winner_name = p1_name if winner_idx == 0 else p2_name
+        winner_name = names[winner_idx]
 
         results[winner_name]["wins"] += 1
         results[winner_name]["total_turns"] += turns
@@ -57,4 +63,22 @@ def run_simulation(num_games=1000):
 
 
 if __name__ == "__main__":
-    run_simulation(1000)
+    parser = argparse.ArgumentParser(description="Run Ur AI Simulations")
+    parser.add_argument("bot1", type=str, help="Name of the first bot class (e.g., RandomBot)")
+    parser.add_argument("bot2", type=str, help="Name of the second bot class (e.g., GreedyBot)")
+    parser.add_argument("--games", type=int, default=1000, help="Number of games to simulate")
+
+    args = parser.parse_args()
+
+    # Dynamically grab the bot classes from the bots.py file
+    bot1_cls = getattr(bots, args.bot1, None)
+    bot2_cls = getattr(bots, args.bot2, None)
+
+    if not bot1_cls or not bot2_cls:
+        print("Error: Could not find one or both bots. Available bots in game/ai/bots.py:")
+        for attr_name in dir(bots):
+            if attr_name.endswith("Bot") and attr_name != "Bot":
+                print(f" - {attr_name}")
+        exit(1)
+
+    run_simulation(bot1_cls, bot2_cls, args.games)
