@@ -35,7 +35,7 @@ class TestUrEngine(unittest.TestCase):
         # P1 is in the shared zone at progress 5 (coord 1,0)
         self.p1.pieces[0].progress = 5
 
-        # P2 is at progress 4 (coord 2,0). P2 rolls 1, aiming for progress 5 (coord 1,0)
+        # P2 is at progress 4 (coord 0,0). P2 rolls 1, aiming for progress 5 (coord 1,0)
         self.p2.pieces[0].progress = 4
         self.game.current_idx = 1  # Manually set to P2's turn
 

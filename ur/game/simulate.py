@@ -1,48 +1,12 @@
-import os
 import time
 import argparse
 from game.ai.environment import UrEnvironment
 from game.ai import bots
-
-class SimVisualizer:
-    def __init__(self, env):
-        self.env = env
-
-    def draw(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-        engine = self.env.game
-
-        grid = [
-            ["[*]", "[ ]", "[ ]", "[ ]", "   ", "   ", "[*]", "[ ]"],
-            ["[ ]", "[ ]", "[ ]", "[*]", "[ ]", "[ ]", "[ ]", "[ ]"],
-            ["[*]", "[ ]", "[ ]", "[ ]", "   ", "   ", "[*]", "[ ]"]
-        ]
-
-        for player in engine.players:
-            for piece in player.pieces:
-                if piece.is_active:
-                    r, c = piece.coord
-                    grid[r][c] = f"[{player.symbol}]"
-
-        p1, p2 = engine.players[0], engine.players[1]
-
-        p1_start = sum(1 for p in p1.pieces if p.progress == 0)
-        p1_score = sum(1 for p in p1.pieces if p.progress == 15)
-        p2_start = sum(1 for p in p2.pieces if p.progress == 0)
-        p2_score = sum(1 for p in p2.pieces if p.progress == 15)
-
-        print(f"=== UR BOT SIMULATION ===")
-        print(f"Last Action: {engine.last_action}\n")
-        print(f"{p2.name} ({p2.symbol}) | Waiting: {p2_start} | Scored: {p2_score}")
-        for row in grid:
-            print("".join(row))
-        print(f"{p1.name} ({p1.symbol}) | Waiting: {p1_start} | Scored: {p1_score}")
-        print("=========================\n")
+from game.play import BoardVisualizer  # <-- Import our beautiful new UI!
 
 
 def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
     env = UrEnvironment()
-    ui = SimVisualizer(env) if show else None
 
     bot_a = bot_class_1()
     bot_b = bot_class_2()
@@ -64,20 +28,21 @@ def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
         print(f"Starting simulation of {num_games} games between {name_a} and {name_b}...")
 
     for i in range(num_games):
-        # Swap who goes first halfway through to be fair
+        # Fair play tournament swap: who gets to go first as P1?
         if i < num_games // 2:
-            players = {0: bot_a, 1: bot_b}
-            names = {0: name_a, 1: name_b}
+            p1_name, p1_bot = name_a, bot_a
+            p2_name, p2_bot = name_b, bot_b
         else:
-            players = {0: bot_b, 1: bot_a}
-            names = {0: name_b, 1: name_a}
+            p1_name, p1_bot = name_b, bot_b
+            p2_name, p2_bot = name_a, bot_a
 
-        state, valid_moves, done, _ = env.reset()
+        # Pass the names cleanly into the environment
+        state, valid_moves, done, _ = env.reset(p1_name, p2_name)
 
-        # Sync the names to the engine so the visualizer prints them correctly
-        env.game.players[0].name = names[0]
-        env.game.players[1].name = names[1]
+        # Map the active bots to the player index
+        players = {0: p1_bot, 1: p2_bot}
 
+        ui = BoardVisualizer(env.game) if show else None
         turns = 0
 
         if show:
@@ -97,8 +62,9 @@ def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
                 ui.draw()
                 time.sleep(0.1)  # Brief pause for animation
 
+        # --- BUG FIXED HERE ---
         winner_idx = 0 if env.game.players[0].has_won() else 1
-        winner_name = names[winner_idx]
+        winner_name = env.game.players[winner_idx].name  # Ask the engine!
 
         results[winner_name]["wins"] += 1
         results[winner_name]["total_turns"] += turns

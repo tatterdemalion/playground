@@ -5,10 +5,11 @@ class UrEnvironment:
     def __init__(self):
         self.game = None
 
-    def reset(self):
+    def reset(self, p1_name="P1", p2_name="P2"):
         """Starts a fresh game and advances until a player actually has a choice to make."""
-        p1 = Player("P1", P1_PATH, "X")
-        p2 = Player("P2", P2_PATH, "O")
+        # Clean initialization using standard paths
+        p1 = Player(p1_name, P1_PATH, "●")
+        p2 = Player(p2_name, P2_PATH, "●")
         self.game = Engine(p1, p2)
 
         return self._advance_to_next_decision()
