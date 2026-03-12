@@ -2,8 +2,8 @@ import os
 import sys
 import time
 import random
-from game.ur import Player, Engine, P1_PATH, P2_PATH, ROSETTAS
-from game.ai.bots import RandomBot, GreedyBot, StrategicBot
+from ur.game import Player, Engine, P1_PATH, P2_PATH, ROSETTAS
+from ur.ai.bots import RandomBot, GreedyBot, StrategicBot
 
 # --- ANSI COLOR CODES ---
 C_RESET = '\033[0m'

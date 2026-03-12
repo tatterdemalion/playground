@@ -1,8 +1,8 @@
 import time
 import argparse
-from game.ai.environment import UrEnvironment
-from game.ai import bots
-from game.play import BoardVisualizer  # <-- Import our beautiful new UI!
+from ur.ai.environment import UrEnvironment
+from ur.ai import bots
+from ur.play import BoardVisualizer
 
 
 def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):

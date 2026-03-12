@@ -1,5 +1,5 @@
 import random
-from game.ur import Player, Piece, ROSETTAS
+from ur.game import Player, Piece, ROSETTAS
 
 class Bot:
     def choose_move(self, state: dict, valid_moves: list, player: Player) -> Piece:

@@ -1,6 +1,6 @@
 import unittest
 
-from game.ur import Player, Engine, P1_PATH, P2_PATH
+from ur.game import Player, Engine, P1_PATH, P2_PATH
 
 
 class TestUrEngine(unittest.TestCase):
