@@ -1,4 +1,5 @@
 import random
+from typing import Optional
 
 # --- 1. THE BOARD GEOMETRY ---
 
@@ -41,8 +42,11 @@ class Piece:
         self.target_coord = self.player.path.get(self.target_progress)
         return self
 
-    def move(self):
-        self.progress = self.target_progress
+    def move(self, target: Optional[int] = None):
+        if target is not None:
+            self.progress = target
+        else:
+            self.progress = self.target_progress
 
 
 class Player:
@@ -123,7 +127,7 @@ class Engine:
         if piece.target_coord is not None:
             for opp_piece in self.opponent.pieces:
                 if opp_piece.coord == piece.target_coord and opp_piece.is_available:
-                    opp_piece.progress = 0
+                    opp_piece.move(target=0)
                     state = "hit opponent"
                     break
 
