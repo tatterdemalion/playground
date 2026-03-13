@@ -54,7 +54,7 @@ class UrEnvironment:
         and fast-forwards to the next decision.
         """
         # Track state before move to calculate rewards
-        opp_active_before = sum(1 for p in self.game.opponent.pieces if p.is_active)
+        opp_active_before = sum(1 for p in self.game.opponent.pieces if p.is_available)
         scored_before = sum(1 for p in self.game.current_player.pieces if p.progress == 15)
 
         # Execute
@@ -62,7 +62,7 @@ class UrEnvironment:
 
         # Calculate intermediate rewards (Great for training RL later)
         reward = 0
-        opp_active_after = sum(1 for p in self.game.opponent.pieces if p.is_active)
+        opp_active_after = sum(1 for p in self.game.opponent.pieces if p.is_available)
         scored_after = sum(1 for p in self.game.current_player.pieces if p.progress == 15)
 
         if scored_after > scored_before:

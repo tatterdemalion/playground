@@ -13,8 +13,8 @@ C_P2 = '\033[91m'         # Red for the Bot
 C_ROSETTA = '\033[93m'
 C_TEXT = '\033[97m'
 
-# Unicode Circle Numbers for easier move selection
 NUM_CIRCLES = {1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤", 6: "⑥", 7: "⑦"}
+
 
 class BoardVisualizer:
     def __init__(self, engine: Engine):
@@ -36,7 +36,7 @@ class BoardVisualizer:
         p1_waiting_chars = []
         for piece in p1.pieces:
             if piece.progress == 0:
-                p_id = int(piece.identifier.split(':')[1]) + 1
+                p_id = piece.identifier + 1
                 p1_waiting_chars.append(f"{C_P1}{NUM_CIRCLES[p_id]}{C_RESET}")
         p1_waiting_line = "      " + " ".join(p1_waiting_chars)
 
@@ -47,20 +47,18 @@ class BoardVisualizer:
 
                 content = " "
                 if (r, c) in ROSETTAS:
-                    content = f"{C_ROSETTA}✿{C_RESET}"
+                    content = f"{C_ROSETTA}✿{C_BOARD}"
 
                 for piece in p2.pieces:
-                    if piece.is_active and piece.coord == (r, c):
-                        content = f"{C_P2}●{C_RESET}"
+                    if piece.is_available and piece.coord == (r, c):
+                        content = f"{C_P2}●{C_BOARD}"
 
                 for piece in p1.pieces:
-                    if piece.is_active and piece.coord == (r, c):
-                        # Extract the 1-7 ID dynamically from the engine's piece identifier
-                        p_id = int(piece.identifier.split(':')[1]) + 1
-                        content = f"{C_P1}{NUM_CIRCLES[p_id]}{C_RESET}"
+                    if piece.is_available and piece.coord == (r, c):
+                        p_id = piece.identifier + 1
+                        content = f"{C_P1}{NUM_CIRCLES[p_id]}{C_BOARD}"
 
                 cells[f"c{r}{c}"] = content
-
         p2_header = f"      [{C_P2} {p2.name} {p2_score * '●'} {C_RESET}] "
         p1_footer = f"      [{C_P1} {p1.name} {p1_score * '●'} {C_RESET}] "
 
@@ -70,13 +68,15 @@ Last action: {self.engine.last_action}
 
 {p2_header}
 {p2_waiting_line}
-{C_BOARD}╔═══╦═══╦═══╦═══╗       ╔═══╦═══╗{C_RESET}
-{C_BOARD}║{C_RESET} {cells['c00']} {C_BOARD}║{C_RESET} {cells['c01']} {C_BOARD}║{C_RESET} {cells['c02']} {C_BOARD}║{C_RESET} {cells['c03']} {C_BOARD}║       ║{C_RESET} {cells['c06']} {C_BOARD}║{C_RESET} {cells['c07']} {C_BOARD}║{C_RESET}
-{C_BOARD}╠═══╬═══╬═══╬═══╬═══╦═══╬═══╬═══╣{C_RESET}
-{C_BOARD}║{C_RESET} {cells['c10']} {C_BOARD}║{C_RESET} {cells['c11']} {C_BOARD}║{C_RESET} {cells['c12']} {C_BOARD}║{C_RESET} {cells['c13']} {C_BOARD}║{C_RESET} {cells['c14']} {C_BOARD}║{C_RESET} {cells['c15']} {C_BOARD}║{C_RESET} {cells['c16']} {C_BOARD}║{C_RESET} {cells['c17']} {C_BOARD}║{C_RESET}
-{C_BOARD}╠═══╬═══╬═══╬═══╬═══╩═══╬═══╬═══╣{C_RESET}
-{C_BOARD}║{C_RESET} {cells['c20']} {C_BOARD}║{C_RESET} {cells['c21']} {C_BOARD}║{C_RESET} {cells['c22']} {C_BOARD}║{C_RESET} {cells['c23']} {C_BOARD}║       ║{C_RESET} {cells['c26']} {C_BOARD}║{C_RESET} {cells['c27']} {C_BOARD}║{C_RESET}
-{C_BOARD}╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝{C_RESET}
+{C_BOARD}
+╔═══╦═══╦═══╦═══╗       ╔═══╦═══╗
+║ {cells['c00']} ║ {cells['c01']} ║ {cells['c02']} ║ {cells['c03']} ║       ║ {cells['c06']} ║ {cells['c07']} ║
+╠═══╬═══╬═══╬═══╬═══╦═══╬═══╬═══╣
+║ {cells['c10']} ║ {cells['c11']} ║ {cells['c12']} ║ {cells['c13']} ║ {cells['c14']} ║ {cells['c15']} ║ {cells['c16']} ║ {cells['c17']} ║
+╠═══╬═══╬═══╬═══╬═══╩═══╬═══╬═══╣
+║ {cells['c20']} ║ {cells['c21']} ║ {cells['c22']} ║ {cells['c23']} ║       ║ {cells['c26']} ║ {cells['c27']} ║
+╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝
+{C_RESET}
 {p1_waiting_line}
 {p1_footer}
 """
@@ -86,7 +86,6 @@ Last action: {self.engine.last_action}
 def play_game(bot_class):
     bot_name = bot_class.__name__
 
-    # Ahh, much better. P1 gets P1_PATH, P2 gets P2_PATH.
     p1 = Player("You", P1_PATH, "●")
     p2 = Player(bot_name, P2_PATH, "●")
 
@@ -130,10 +129,10 @@ def play_game(bot_class):
             print("Your options:")
 
             # Sort by the piece's permanent ID (1 to 7)
-            valid_moves.sort(key=lambda p: int(p.identifier.split(':')[1]))
+            valid_moves.sort(key=lambda p: p.identifier)
 
             for piece in valid_moves:
-                p_id = int(piece.identifier.split(':')[1]) + 1
+                p_id = piece.identifier + 1
                 target = piece.progress + roll
                 target_coord = p1.path[target]
                 status = "Off-board" if piece.progress == 0 else f"Square {piece.progress}"
@@ -145,7 +144,7 @@ def play_game(bot_class):
                     hints.append(f"{C_ROSETTA}Lands on Rosetta (Roll again!){C_RESET}")
 
                 for opp_piece in p2.pieces:
-                    if opp_piece.is_active and opp_piece.coord == target_coord:
+                    if opp_piece.is_available and opp_piece.coord == target_coord:
                         hints.append(f"{C_P2}Captures {bot_name}'s piece!{C_RESET}")
 
                 hint_text = f" — {' '.join(hints)}" if hints else ""
@@ -162,7 +161,7 @@ def play_game(bot_class):
                 try:
                     choice = int(raw_input)
                     # Match the user's input directly to the piece's permanent ID
-                    chosen_piece = next((p for p in valid_moves if int(p.identifier.split(':')[1]) + 1 == choice), None)
+                    chosen_piece = next((p for p in valid_moves if p.identifier + 1 == choice), None)
                     if not chosen_piece:
                         print("Invalid choice. That piece cannot move right now.")
                 except ValueError:

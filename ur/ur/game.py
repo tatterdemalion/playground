@@ -15,23 +15,34 @@ P2_PATH = {
 }
 
 ROSETTAS = {(0, 0), (2, 0), (1, 3), (0, 6), (2, 6)}
+FINAL_SQUARE = 14
+FINISH = 15
 
 
 # --- 2. ENTITIES ---
 class Piece:
     def __init__(self, identifier: int, player: "Player"):
-        self.id_num = identifier + 1
-        self.identifier = f"{player.name}:{identifier}"
+        self.identifier = identifier
         self.player = player
         self.progress = 0
+        self.target_progress = 0
+        self.target_coord = None
 
     @property
     def coord(self):
         return self.player.path[self.progress]
 
     @property
-    def is_active(self):
-        return 0 < self.progress < 15
+    def is_available(self):
+        return 0 <= self.progress < FINISH
+
+    def target(self, roll:int) -> "Piece":
+        self.target_progress = self.progress + roll
+        self.target_coord = self.player.path.get(self.target_progress)
+        return self
+
+    def move(self):
+        self.progress = self.target_progress
 
 
 class Player:
@@ -42,7 +53,7 @@ class Player:
         self.pieces = [Piece(i, self) for i in range(7)]
 
     def has_won(self) -> bool:
-        return all(piece.progress == 15 for piece in self.pieces)
+        return all(piece.progress > FINAL_SQUARE for piece in self.pieces)
 
 
 # --- 3. THE ENGINE ---
@@ -53,12 +64,20 @@ class Engine:
         self.last_action = "Game started."
 
     @property
+    def opponent_idx(self) -> int:
+        return 1 - self.current_idx
+
+    @property
     def current_player(self) -> Player:
         return self.players[self.current_idx]
 
     @property
     def opponent(self) -> Player:
-        return self.players[1 - self.current_idx]
+        return self.players[self.opponent_idx]
+
+    def switch_player(self) -> Player:
+        self.current_idx = self.opponent_idx
+        return self.current_player
 
     def roll_dice(self) -> int:
         return sum(random.getrandbits(1) for _ in range(4))
@@ -67,52 +86,56 @@ class Engine:
         if roll == 0:
             return []
 
+        current_occupied = {p.progress for p in self.current_player.pieces if p.progress < FINISH}
+        opponent_safe = {p.coord for p in self.opponent.pieces if p.is_available and p.coord in ROSETTAS}
+
         valid_moves = []
+
         for piece in self.current_player.pieces:
-            if piece.progress == 15:
+            piece.target(roll)
+
+            # Rule A: Piece is already done
+            if not piece.is_available:
                 continue
 
-            target_progress = piece.progress + roll
-            if target_progress > 15:
+
+            # Rule B: Needs exact roll to score
+            if piece.target_progress > FINISH:
                 continue
 
-            target_coord = self.current_player.path[target_progress]
-
-            # Rule 1 FIX: Cannot land on your own piece, unless it is off-board at 15
-            if target_progress < 15 and any(p.progress == target_progress for p in self.current_player.pieces):
+            # Rule C: Cannot land on your own piece
+            if piece.target_progress in current_occupied:
                 continue
 
-            # Rule 2: Cannot hit an opponent if they are on a Rosetta
-            if target_coord in ROSETTAS:
-                if any(p.coord == target_coord for p in self.opponent.pieces if p.is_active):
-                    continue
+            # Rule D: Cannot hit an opponent on a Rosetta
+            if piece.target_coord in opponent_safe:
+                continue
 
             valid_moves.append(piece)
 
         return valid_moves
 
     def execute_move(self, piece: Piece, roll: int):
-        target_progress = piece.progress + roll
-        target_coord = self.current_player.path[target_progress]
         state = "moved"
-        roll_again = target_coord in ROSETTAS and target_progress < 15
+        roll_again = piece.target_coord in ROSETTAS and piece.target_progress < FINISH
 
         # Check for hit
-        if target_coord is not None:
+        if piece.target_coord is not None:
             for opp_piece in self.opponent.pieces:
-                if opp_piece.coord == target_coord and opp_piece.is_active:
+                if opp_piece.coord == piece.target_coord and opp_piece.is_available:
                     opp_piece.progress = 0
                     state = "hit opponent"
                     break
 
-        piece.progress = target_progress
-        if target_progress == 15:
+        piece.move()
+
+        if piece.progress == FINISH:
             state = "scored"
-            roll_again = False # Can't roll again if you move off the board
+            roll_again = False
 
         self.last_action = f"{self.current_player.name} rolled {roll}: {piece.identifier} {state}."
 
         if not roll_again and not self.current_player.has_won():
-            self.current_idx = 1 - self.current_idx
+            self.switch_player()
         elif roll_again:
             self.last_action += " Rolled again!"
