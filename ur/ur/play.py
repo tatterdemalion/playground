@@ -6,12 +6,12 @@ from ur.game import Player, Engine, P1_PATH, P2_PATH, ROSETTAS
 from ur.ai.bots import RandomBot, GreedyBot, StrategicBot
 
 # --- ANSI COLOR CODES ---
-C_RESET = '\033[0m'
-C_BOARD = '\033[90m'
-C_P1 = '\033[96m'         # Cyan for You
-C_P2 = '\033[91m'         # Red for the Bot
-C_ROSETTA = '\033[93m'
-C_TEXT = '\033[97m'
+C_RESET = '\033[0m'       # Resets terminal color back to default
+C_BOARD = '\033[90m'      # Dark Gray for drawing the grid lines of the board
+C_P1 = '\033[96m'         # Bright Cyan for Player 1 (You) and your pieces
+C_P2 = '\033[91m'         # Bright Red for Player 2 (The Bot) and its pieces
+C_ROSETTA = '\033[93m'    # Bright Yellow for Rosetta squares (✿) and point alerts
+C_TEXT = '\033[97m'       # Bright White for headers, menus, and general UI text
 
 NUM_CIRCLES = {1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤", 6: "⑥", 7: "⑦"}
 
@@ -201,7 +201,7 @@ def show_tutorial():
 
 def main_menu():
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
+        os.system('clear')
         print(f"{C_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}\n")
         print("  [1] Play Game")
         print("  [2] How to Play (Tutorial)")
@@ -215,14 +215,14 @@ def main_menu():
                 play_game(bot_class)
         elif choice == '2':
             show_tutorial()
-        elif choice == '3':
+        elif choice == '3' or choice == "exit":
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit()
 
 
 def select_bot_menu():
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
+        os.system('clear')
         print(f"{C_TEXT}=== SELECT OPPONENT ==={C_RESET}\n")
         print("  [1] RandomBot    (Easy - Moves completely randomly)")
         print("  [2] GreedyBot    (Medium - Always takes points or hits immediately)")

@@ -17,6 +17,7 @@ class TestUrEngine(unittest.TestCase):
     def test_basic_movement_and_turn_passing(self):
         """A piece should move correctly, and passing the turn should work."""
         piece = self.p1.pieces[0]
+        piece.target(2)
         self.game.execute_move(piece, 2)
 
         self.assertEqual(piece.progress, 2)
@@ -39,6 +40,7 @@ class TestUrEngine(unittest.TestCase):
         self.p2.pieces[0].progress = 4
         self.game.current_idx = 1  # Manually set to P2's turn
 
+        self.p2.pieces[0].target(1)
         self.game.execute_move(self.p2.pieces[0], 1)
 
         self.assertEqual(self.p2.pieces[0].progress, 5)  # P2 successfully moved
@@ -59,6 +61,7 @@ class TestUrEngine(unittest.TestCase):
     def test_rosetta_extra_turn(self):
         """Landing on a Rosetta should grant the player another turn."""
         # P1 rolls 4, landing on their private start Rosetta
+        self.p1.pieces[0].target(4)
         self.game.execute_move(self.p1.pieces[0], 4)
         self.assertEqual(self.game.current_idx, 0)  # Turn did NOT pass; still P1's turn
 
