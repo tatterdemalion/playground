@@ -425,7 +425,7 @@ def play_network_host():
                 chosen_piece = next(p for p in valid_moves if p.identifier == piece_id)
 
             engine.execute_move(chosen_piece, roll)
-            save_path = save_game(engine, "lan", save_path)
+            save_path = save_game(engine, "lan", game_name, save_path)
 
             # Push result to client
             if engine.winner:
