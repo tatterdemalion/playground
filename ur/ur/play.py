@@ -210,7 +210,7 @@ def play_game(bot: Bot):
 
 def show_tutorial():
     os.system('cls' if os.name == 'nt' else 'clear')
-    print(f"{C_TEXT}=== HOW TO PLAY THE ROYAL GAME OF UR ==={C_RESET}\n")
+    print(f"{C_BOLD_TEXT}=== HOW TO PLAY THE ROYAL GAME OF UR ==={C_RESET}\n")
     print("1. Objective: Move all 7 of your pieces across the board to the end before your opponent.")
     print("2. Movement: You roll 4 binary dice each turn, yielding a move of 0 to 4 spaces.")
     print("3. Stacking: You cannot land on a square occupied by your own piece.")
@@ -247,7 +247,7 @@ def main_menu():
 def select_bot_menu():
     while True:
         os.system('clear')
-        print(f"{C_TEXT}=== SELECT OPPONENT ==={C_RESET}\n")
+        print(f"{C_BOLD_TEXT}=== SELECT OPPONENT ==={C_RESET}\n")
         print("  [1] RandomBot    (Easy - Moves completely randomly)")
         print("  [2] GreedyBot    (Medium - Always takes points or hits immediately)")
         print("  [3] StrategicBot (Hard - Calculates probabilities of danger)\n")
