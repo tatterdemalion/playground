@@ -53,17 +53,41 @@ def _save_session(data: dict):
         json.dump(session, f)
 
 
+COMMANDS_HINT = f"{C_TEXT}  (Type 'menu' to return to main menu, 'exit' / 'quit' / ':q' to quit){C_RESET}"
+
+
+class BackToMenu(Exception):
+    pass
+
+
+def _is_exit(s: str) -> bool:
+    return s.lower() in ("exit", "quit", ":q")
+
+
+def _is_menu(s: str) -> bool:
+    return s.lower() == "menu"
+
+
+def _handle_command(s: str):
+    """Call after any input to handle global commands."""
+    if _is_exit(s):
+        sys.exit()
+    if _is_menu(s):
+        raise BackToMenu()
+
+
 def clear():
     os.system("clear")
 
 
 class BoardVisualizer:
-    def __init__(self, engine: Engine, local_player: Optional[Player] = None):
+    def __init__(self, engine: Engine, local_player: Optional[Player] = None, game_name: str = ""):
         self.engine = engine
         self.p1, self.p2 = self.engine.players
         # local_player determines who is drawn at the bottom in cyan.
         # Defaults to p1 (host/single-player perspective).
         self._local = local_player if local_player is not None else self.p1
+        self.game_name = game_name
 
     @property
     def _bottom(self) -> Player:
@@ -95,8 +119,9 @@ class BoardVisualizer:
 
         board = TEMPLATE.format(**cells)
 
+        name_display = f"  {C_TEXT}{self.game_name}{C_RESET}" if self.game_name else ""
         game_screen = f"""
-{C_BOLD_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}
+{C_BOLD_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}{name_display}
 
         {top_line}
         {top_waiting_line}
@@ -193,10 +218,10 @@ def _get_human_move(valid_moves: list[Piece], roll: int, p2: Player, bot_name: s
         hint_text = _build_move_hints(piece, roll, p2, bot_name)
         print(f"  {C_P1}{NUM_CIRCLES[piece.identifier]}{C_RESET} : {status} -> Square {target}{hint_text}")
 
+    print(COMMANDS_HINT)
     while True:
-        raw_input = input("\nSelect a piece to move (1-7): ")
-        if raw_input == "exit":
-            sys.exit()
+        raw_input = input("\nSelect a piece to move (1-7): ").strip()
+        _handle_command(raw_input)
         try:
             choice = int(raw_input)
             chosen = next((p for p in valid_moves if p.identifier == choice), None)
@@ -228,7 +253,7 @@ def play_game(bot: Bot, save: SaveFile = None):
         game_name = generate_game_name()
         save_path = None
 
-    ui = BoardVisualizer(engine)
+    ui = BoardVisualizer(engine, game_name=game_name)
 
     while not engine.winner:
         roll = engine.roll_dice()
@@ -262,7 +287,8 @@ def play_game(bot: Bot, save: SaveFile = None):
     delete_save(save_path)
     ui.draw()
     print(f"\nGame Over! {engine.winner.name} took the crown!")
-    input("\nPress Enter to return to the main menu...")
+    print(COMMANDS_HINT)
+    _handle_command(input("\nPress Enter to return to the main menu: ").strip())
 
 
 def show_tutorial():
@@ -275,7 +301,9 @@ def show_tutorial():
     print("   sending it back off-board to start over.")
     print(f"5. Rosettas: Landing on a Rosetta ({C_ROSETTA}✿{C_RESET}) grants an extra turn immediately.")
     print("   Additionally, the central Rosetta is a safe haven where your piece cannot be captured.\n")
-    input("Press Enter to return to the main menu...")
+    print(COMMANDS_HINT)
+    raw = input("\nPress Enter to return to the main menu: ").strip()
+    _handle_command(raw)
 
 
 def _serialize_board(engine: Engine) -> dict:
@@ -303,7 +331,9 @@ def play_network_host():
     """Host a game: you are P1, the remote player is P2."""
     os.system("clear")
     print(f"{C_BOLD_TEXT}=== HOST GAME ==={C_RESET}\n")
+    print(COMMANDS_HINT)
     game_name = input("Enter a game name (or press Enter to start fresh): ").strip()
+    _handle_command(game_name)
 
     save = None
     if game_name:
@@ -339,7 +369,8 @@ def play_network_host():
         save_path = save.path
         server.send({"type": "restore", "board": _serialize_board(engine),
                      "last_action": engine.last_action,
-                     "current_idx": engine.current_idx})
+                     "current_idx": engine.current_idx,
+                     "game_name": game_name})
         print(f"{C_P1}Resuming '{game_name}'...{C_RESET}")
         time.sleep(1)
     else:
@@ -347,9 +378,9 @@ def play_network_host():
         p2 = Player("Opponent", P2_PATH, "●")
         engine = Engine(p1, p2)
         save_path = None
-        server.send({"type": "new_game"})
+        server.send({"type": "new_game", "game_name": game_name})
 
-    ui = BoardVisualizer(engine)
+    ui = BoardVisualizer(engine, game_name=game_name)
 
     try:
         while not engine.winner:
@@ -358,7 +389,6 @@ def play_network_host():
 
             ui.draw()
             print(f"Last action: {engine.last_action}")
-
 
             player_color = C_P1 if engine.current_player == p1 else C_P2
             turn_text = "Your" if engine.current_player == p1 else "Opponent's"
@@ -416,7 +446,8 @@ def play_network_host():
     finally:
         server.close()
 
-    input("\nPress Enter to return to the main menu...")
+    print(COMMANDS_HINT)
+    _handle_command(input("\nPress Enter to return to the main menu: ").strip())
 
 
 def play_network_client(host_ip: str):
@@ -433,17 +464,19 @@ def play_network_client(host_ip: str):
     p1 = Player("Host", P1_PATH, "●")
     p2 = Player("You", P2_PATH, "●")
     engine = Engine(p1, p2)
-    ui = BoardVisualizer(engine, local_player=p2)
 
-    # First message is always either "new_game" or "restore"
+    # First message carries the game name and optional restore state
     init = client.recv()
+    game_name = init.get("game_name", "")
+    ui = BoardVisualizer(engine, local_player=p2, game_name=game_name)
+
     if init["type"] == "restore":
         _apply_board(engine, init["board"])
         engine.last_action = init["last_action"]
         engine.current_idx = init["current_idx"]
         ui.draw()
         print(f"Last action: {engine.last_action}")
-        print(f"\n{C_P1}Resuming saved game...{C_RESET}")
+        print(f"\n{C_P1}Resuming '{game_name}'...{C_RESET}")
         time.sleep(1)
 
     try:
@@ -494,7 +527,8 @@ def play_network_client(host_ip: str):
     finally:
         client.close()
 
-    input("\nPress Enter to return to the main menu...")
+    print(COMMANDS_HINT)
+    _handle_command(input("\nPress Enter to return to the main menu: ").strip())
 
 
 def _pick_local_save_menu() -> Optional[SaveFile]:
@@ -508,12 +542,11 @@ def _pick_local_save_menu() -> Optional[SaveFile]:
     print(f"{C_BOLD_TEXT}=== CONTINUE GAME ==={C_RESET}\n")
     for i, s in enumerate(saves, 1):
         print(f"  [{i}] {s}")
-    print(f"\n  [0] Back\n")
+    print(f"\n{COMMANDS_HINT}\n")
 
     while True:
         raw = input("Select a save: ").strip()
-        if raw == '0':
-            return None
+        _handle_command(raw)
         try:
             idx = int(raw) - 1
             if 0 <= idx < len(saves):
@@ -521,6 +554,10 @@ def _pick_local_save_menu() -> Optional[SaveFile]:
         except ValueError:
             pass
         print("Invalid choice.")
+
+
+def _bot_by_name(name: str) -> Optional[Bot]:
+    return {"RandomBot": RandomBot, "GreedyBot": GreedyBot, "StrategicBot": StrategicBot}.get(name, lambda: None)()
 
 
 def main_menu():
@@ -532,36 +569,41 @@ def main_menu():
         print("  [3] Host Multiplayer Game")
         print("  [4] Join Multiplayer Game")
         print("  [5] How to Play (Tutorial)")
-        print("  [6] Exit\n")
+        print(f"\n{COMMANDS_HINT}\n")
 
-        choice = input("Select an option: ")
+        try:
+            choice = input("Select an option: ").strip()
+            _handle_command(choice)
 
-        if choice == '1':
-            bot = select_bot_menu()
-            if bot:
-                play_game(bot)
-        elif choice == '2':
-            save = _pick_local_save_menu()
-            if save:
+            if choice == '1':
                 bot = select_bot_menu()
                 if bot:
-                    play_game(bot, save=save)
-        elif choice == '3':
-            play_network_host()
-        elif choice == '4':
-            os.system('clear')
-            print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
-            last_ip = _load_session().get("last_ip", "")
-            prompt = f"Enter host IP address [{last_ip}]: " if last_ip else "Enter host IP address: "
-            host_ip = input(prompt).strip() or last_ip
-            if host_ip:
-                _save_session({"last_ip": host_ip})
-                play_network_client(host_ip)
-        elif choice == '5':
-            show_tutorial()
-        elif choice == '6' or choice == "exit":
-            os.system('cls' if os.name == 'nt' else 'clear')
-            sys.exit()
+                    play_game(bot)
+            elif choice == '2':
+                save = _pick_local_save_menu()
+                if save:
+                    bot = _bot_by_name(save.p2_name) or select_bot_menu()
+                    if bot:
+                        play_game(bot, save=save)
+            elif choice == '3':
+                play_network_host()
+            elif choice == '4':
+                os.system('clear')
+                print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
+                last_ip = _load_session().get("last_ip", "")
+                prompt = f"Enter host IP address [{last_ip}]: " if last_ip else "Enter host IP address: "
+                print(COMMANDS_HINT + "\n")
+                host_ip = input(prompt).strip()
+                _handle_command(host_ip)
+                host_ip = host_ip or last_ip
+                if host_ip:
+                    _save_session({"last_ip": host_ip})
+                    play_network_client(host_ip)
+            elif choice == '5':
+                show_tutorial()
+
+        except BackToMenu:
+            continue
 
 
 def select_bot_menu():
@@ -570,10 +612,11 @@ def select_bot_menu():
         print(f"{C_BOLD_TEXT}=== SELECT OPPONENT ==={C_RESET}\n")
         print("  [1] RandomBot    (Easy - Moves completely randomly)")
         print("  [2] GreedyBot    (Medium - Always takes points or hits immediately)")
-        print("  [3] StrategicBot (Hard - Calculates probabilities of danger)\n")
-        print("  [4] Back to Main Menu\n")
+        print("  [3] StrategicBot (Hard - Calculates probabilities of danger)")
+        print(f"\n{COMMANDS_HINT}\n")
 
-        choice = input("Select an opponent: ")
+        choice = input("Select an opponent: ").strip()
+        _handle_command(choice)
 
         if choice == '1':
             return RandomBot()
@@ -581,8 +624,6 @@ def select_bot_menu():
             return GreedyBot()
         elif choice == '3':
             return StrategicBot()
-        elif choice == '4':
-            return None
 
 
 if __name__ == "__main__":

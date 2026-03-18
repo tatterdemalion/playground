@@ -99,7 +99,19 @@ def save_game(engine: Engine, mode: str, game_name: str, path: Optional[str] = N
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
+    _prune_saves(keep=10, current_path=path)
+
     return path
+
+
+def _prune_saves(keep: int, current_path: str):
+    """Delete oldest saves beyond the keep limit, never deleting the current one."""
+    all_saves = list_saves()
+    if len(all_saves) <= keep:
+        return
+    for s in all_saves[keep:]:
+        if s.path != current_path:
+            delete_save(s.path)
 
 
 def load_save(path: str) -> SaveFile:
