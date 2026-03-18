@@ -3,6 +3,7 @@ import sys
 import time
 import random
 import socket
+import json
 from typing import Optional
 from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS, FINISH
 from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
@@ -31,6 +32,24 @@ TEMPLATE = """\
 ║{o}║{p}║{q}║{r}║       ║{s}║{t}║
 ╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝\
 """
+
+
+SESSION_FILE = os.path.join(os.path.dirname(__file__), "..", "session.json")
+
+
+def _load_session() -> dict:
+    try:
+        with open(SESSION_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_session(data: dict):
+    session = _load_session()
+    session.update(data)
+    with open(SESSION_FILE, "w") as f:
+        json.dump(session, f)
 
 
 def clear():
@@ -442,8 +461,11 @@ def main_menu():
         elif choice == '3':
             os.system('clear')
             print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
-            host_ip = input("Enter host IP address: ").strip()
+            last_ip = _load_session().get("last_ip", "")
+            prompt = f"Enter host IP address [{last_ip}]: " if last_ip else "Enter host IP address: "
+            host_ip = input(prompt).strip() or last_ip
             if host_ip:
+                _save_session({"last_ip": host_ip})
                 play_network_client(host_ip)
         elif choice == '4':
             show_tutorial()
