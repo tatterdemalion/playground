@@ -24,8 +24,9 @@ FINISH = 15
 @dataclass
 class Stats:
     p1_score: int
-    p2_waiting: int
+    p1_waiting: int
     p2_score: int
+    p2_waiting: int
 
 
 # --- 2. ENTITIES ---
@@ -65,7 +66,7 @@ class Player:
         self.pieces = [Piece(i, self) for i in range(1, 8)]
 
     def has_won(self) -> bool:
-        return all(piece.progress > FINAL_SQUARE for piece in self.pieces)
+        return all(piece.progress == FINISH for piece in self.pieces)
 
 
 # --- 3. THE ENGINE ---
@@ -98,9 +99,10 @@ class Engine:
 
     def get_stats(self) -> Stats:
         return Stats(
-            p1_score=sum(1 for p in self.p1.pieces if p.progress >= 15),
+            p1_score=sum(1 for p in self.p1.pieces if p.progress == FINISH),
+            p1_waiting=sum(1 for p in self.p1.pieces if p.progress == 0),
+            p2_score=sum(1 for p in self.p2.pieces if p.progress == FINISH),
             p2_waiting=sum(1 for p in self.p2.pieces if p.progress == 0),
-            p2_score=sum(1 for p in self.p2.pieces if p.progress >= 15),
         )
 
 
@@ -164,7 +166,9 @@ class Engine:
 
         self.last_action = f"{self.current_player.name} rolled {roll}: {piece.identifier} {state}."
 
-        if not roll_again and not self.current_player.has_won():
-            self.switch_player()
+        if self.current_player.has_won():
+            pass
         elif roll_again:
             self.last_action += " Rolled again!"
+        else:
+            self.switch_player()

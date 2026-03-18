@@ -126,9 +126,9 @@ def _animate_dice(turn_text: str, player_color: str, roll: int):
     sys.stdout.flush()
 
 
-def _build_move_hints(piece: Piece, roll: int, p1: Player, p2: Player, bot_name: str) -> str:
+def _build_move_hints(piece: Piece, roll: int, p2: Player, bot_name: str) -> str:
     target = piece.progress + roll
-    target_coord = p1.path[target]
+    target_coord = piece.player.path[target]
     hints = []
 
     if target == 15:
@@ -143,14 +143,14 @@ def _build_move_hints(piece: Piece, roll: int, p1: Player, p2: Player, bot_name:
     return f" — {' '.join(hints)}" if hints else ""
 
 
-def _get_human_move(valid_moves: list[Piece], roll: int, p1: Player, p2: Player, bot_name: str) -> Piece:
+def _get_human_move(valid_moves: list[Piece], roll: int, p2: Player, bot_name: str) -> Piece:
     print("Your options:")
     valid_moves.sort(key=lambda p: p.identifier)
 
     for piece in valid_moves:
         target = piece.progress + roll
         status = "Off-board" if piece.progress == 0 else f"Square {piece.progress}"
-        hint_text = _build_move_hints(piece, roll, p1, p2, bot_name)
+        hint_text = _build_move_hints(piece, roll, p2, bot_name)
         print(f"  {C_P1}{NUM_CIRCLES[piece.identifier]}{C_RESET} : {status} -> Square {target}{hint_text}")
 
     while True:
@@ -197,12 +197,12 @@ def play_game(bot: Bot):
         if not valid_moves:
             print("No valid moves. Turn skipped.")
             engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
-            engine.current_idx = 1 - engine.current_idx
+            engine.switch_player()
             time.sleep(2)
             continue
 
         if engine.current_player == p1:
-            chosen_piece = _get_human_move(valid_moves, roll, p1, p2, bot.name)
+            chosen_piece = _get_human_move(valid_moves, roll, p2, bot.name)
         else:
             time.sleep(1.2)
             chosen_piece = _get_bot_move(bot, engine, valid_moves, roll)
@@ -211,7 +211,7 @@ def play_game(bot: Bot):
         engine.execute_move(chosen_piece, roll)
 
     ui.draw()
-    print(f"\nGame Over! {engine.winner} took the crown!")
+    print(f"\nGame Over! {engine.winner.name} took the crown!")
     input("\nPress Enter to return to the main menu...")
 
 
