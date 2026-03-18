@@ -129,7 +129,6 @@ class Engine:
             if not piece.is_available:
                 continue
 
-
             # Rule B: Needs exact roll to score
             if piece.target_progress > FINISH:
                 continue
