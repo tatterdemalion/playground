@@ -22,11 +22,11 @@ MISSING_CELLS = ((0, 4), (0, 5), (2, 4), (2, 5))
 
 TEMPLATE = """\
 ╔═══╦═══╦═══╦═══╗       ╔═══╦═══╗
-║ {c00} ║ {c01} ║ {c02} ║ {c03} ║       ║ {c06} ║ {c07} ║
+║{a}║{b}║{c}║{d}║       ║{e}║{f}║
 ╠═══╬═══╬═══╬═══╬═══╦═══╬═══╬═══╣
-║ {c10} ║ {c11} ║ {c12} ║ {c13} ║ {c14} ║ {c15} ║ {c16} ║ {c17} ║
+║{g}║{h}║{i}║{j}║{k}║{l}║{m}║{n}║
 ╠═══╬═══╬═══╬═══╬═══╩═══╬═══╬═══╣
-║ {c20} ║ {c21} ║ {c22} ║ {c23} ║       ║ {c26} ║ {c27} ║
+║{o}║{p}║{q}║{r}║       ║{s}║{t}║
 ╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝\
 """
 
@@ -86,13 +86,26 @@ class BoardVisualizer:
         )
 
     def _get_cells(self) -> dict[str, str]:
+        """
+        Generates the visual content for each square on the board.
+
+        We use single-character keys ('a', 'b', 'c') for the template variables
+        because the string "{a}" is exactly 3 characters wide. This perfectly
+        matches the 3-character width of the ASCII grid walls (e.g., "═══").
+        This allows the TEMPLATE string in the source code to be a visually
+        perfect 1:1 representation of the final printed board.
+        """
         cells = {}
+        letter_code = 97  # ASCII code for 'a'
+
         for r in range(BOARD_ROWS):
             for c in range(BOARD_COLUMNS):
                 coord = (r, c)
                 if coord in MISSING_CELLS: continue
 
+                # Base content is always exactly 1 visible character
                 content = " "
+
                 if coord in ROSETTAS:
                     content = f"{C_ROSETTA}✿{C_BOARD}"
 
@@ -104,7 +117,9 @@ class BoardVisualizer:
                     if piece.is_available and piece.coord == coord:
                         content = f"{C_P1}{self._numbered_piece(piece)}{C_BOARD}"
 
-                cells[f"c{r}{c}"] = content
+                # Uniformly pad the 1-character content to fit the 3-character walls
+                cells[chr(letter_code)] = f" {content} "
+                letter_code += 1
 
         return cells
 
