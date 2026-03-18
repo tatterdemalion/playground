@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import random
-from dataclasses import dataclass
 from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS
 from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
 
@@ -31,13 +30,6 @@ TEMPLATE = """\
 """
 
 
-@dataclass
-class Stats:
-    p1_score: int
-    p2_waiting: int
-    p2_score: int
-
-
 def clear():
     os.system("clear")
 
@@ -50,7 +42,7 @@ class BoardVisualizer:
     def draw(self):
         clear()
 
-        stats = self._get_stats()
+        stats = self.engine.get_stats()
         cells = self._get_cells()
 
         # Create strings for waiting pieces
@@ -77,13 +69,6 @@ class BoardVisualizer:
         {p1_line}
         """
         print(game_screen)
-
-    def _get_stats(self) -> Stats:
-        return Stats(
-            p1_score=sum(1 for p in self.p1.pieces if p.progress >= 15),
-            p2_waiting=sum(1 for p in self.p2.pieces if p.progress == 0),
-            p2_score=sum(1 for p in self.p2.pieces if p.progress >= 15),
-        )
 
     def _get_cells(self) -> dict[str, str]:
         """

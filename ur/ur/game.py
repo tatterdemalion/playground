@@ -1,4 +1,5 @@
 import random
+from dataclasses import dataclass
 from typing import Optional
 
 # --- 1. THE BOARD GEOMETRY ---
@@ -18,6 +19,13 @@ P2_PATH = {
 ROSETTAS = {(0, 0), (2, 0), (1, 3), (0, 6), (2, 6)}
 FINAL_SQUARE = 14
 FINISH = 15
+
+
+@dataclass
+class Stats:
+    p1_score: int
+    p2_waiting: int
+    p2_score: int
 
 
 # --- 2. ENTITIES ---
@@ -62,8 +70,10 @@ class Player:
 
 # --- 3. THE ENGINE ---
 class Engine:
-    def __init__(self, player_1: Player, player_2: Player):
-        self.players = [player_1, player_2]
+    def __init__(self, p1: Player, p2: Player):
+        self.p1 = p1
+        self.p2 = p2
+        self.players = [p1, p2]
         self.current_idx = 0
         self.last_action = "Game started."
 
@@ -85,6 +95,14 @@ class Engine:
             if player.has_won():
                 return player
         return None
+
+    def get_stats(self) -> Stats:
+        return Stats(
+            p1_score=sum(1 for p in self.p1.pieces if p.progress >= 15),
+            p2_waiting=sum(1 for p in self.p2.pieces if p.progress == 0),
+            p2_score=sum(1 for p in self.p2.pieces if p.progress >= 15),
+        )
+
 
     def switch_player(self) -> Player:
         self.current_idx = self.opponent_idx
