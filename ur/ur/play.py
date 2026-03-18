@@ -8,6 +8,7 @@ from typing import Optional
 from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS, FINISH
 from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
 from ur.network import Server, Client, PORT
+from ur.saves import SaveFile, save_game, load_save_by_name, list_saves, delete_save, generate_game_name
 
 # --- ANSI COLOR CODES ---
 C_RESET = "\033[0m"        # Resets terminal color back to default
@@ -215,11 +216,18 @@ def _get_bot_move(bot: Bot, engine: Engine, valid_moves: list[Piece], roll: int)
     return bot.choose_move(state, valid_moves, engine.current_player)
 
 
-def play_game(bot: Bot):
-    p1 = Player("You", P1_PATH, "●")
-    p2 = Player(bot.name, P2_PATH, "●")
+def play_game(bot: Bot, save: SaveFile = None):
+    if save:
+        engine, p1, p2 = save.restore_engine()
+        game_name = save.game_name
+        save_path = save.path
+    else:
+        p1 = Player("You", P1_PATH, "●")
+        p2 = Player(bot.name, P2_PATH, "●")
+        engine = Engine(p1, p2)
+        game_name = generate_game_name()
+        save_path = None
 
-    engine = Engine(p1, p2)
     ui = BoardVisualizer(engine)
 
     while not engine.winner:
@@ -237,6 +245,7 @@ def play_game(bot: Bot):
             print("No valid moves. Turn skipped.")
             engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
             engine.switch_player()
+            save_path = save_game(engine, "local", game_name, save_path)
             time.sleep(2)
             continue
 
@@ -248,7 +257,9 @@ def play_game(bot: Bot):
             time.sleep(1.2)
 
         engine.execute_move(chosen_piece, roll)
+        save_path = save_game(engine, "local", game_name, save_path)
 
+    delete_save(save_path)
     ui.draw()
     print(f"\nGame Over! {engine.winner.name} took the crown!")
     input("\nPress Enter to return to the main menu...")
@@ -290,6 +301,21 @@ def _apply_board(engine: Engine, board: dict):
 
 def play_network_host():
     """Host a game: you are P1, the remote player is P2."""
+    os.system("clear")
+    print(f"{C_BOLD_TEXT}=== HOST GAME ==={C_RESET}\n")
+    game_name = input("Enter a game name (or press Enter to start fresh): ").strip()
+
+    save = None
+    if game_name:
+        save = load_save_by_name(game_name)
+        if save:
+            print(f"{C_P1}Save found: {save}{C_RESET}")
+        else:
+            print(f"No save found for '{game_name}'. Starting a new game.")
+    else:
+        game_name = generate_game_name()
+        print(f"Game name: {C_P1}{game_name}{C_RESET}")
+
     server = Server()
     server.start()
 
@@ -300,9 +326,7 @@ def play_network_host():
         s.close()
     except Exception:
         local_ip = "127.0.0.1"
-    os.system("clear")
-    print(f"{C_BOLD_TEXT}=== HOST GAME ==={C_RESET}\n")
-    print(f"Your IP address : {C_P1}{local_ip}{C_RESET}")
+    print(f"\nYour IP address : {C_P1}{local_ip}{C_RESET}")
     print(f"Listening on port {PORT}...")
     print("\nWaiting for opponent to connect...\n")
 
@@ -310,9 +334,21 @@ def play_network_host():
     print(f"Opponent connected from {client_ip}!\n")
     time.sleep(1)
 
-    p1 = Player("You", P1_PATH, "●")
-    p2 = Player("Opponent", P2_PATH, "●")
-    engine = Engine(p1, p2)
+    if save:
+        engine, p1, p2 = save.restore_engine()
+        save_path = save.path
+        server.send({"type": "restore", "board": _serialize_board(engine),
+                     "last_action": engine.last_action,
+                     "current_idx": engine.current_idx})
+        print(f"{C_P1}Resuming '{game_name}'...{C_RESET}")
+        time.sleep(1)
+    else:
+        p1 = Player("You", P1_PATH, "●")
+        p2 = Player("Opponent", P2_PATH, "●")
+        engine = Engine(p1, p2)
+        save_path = None
+        server.send({"type": "new_game"})
+
     ui = BoardVisualizer(engine)
 
     try:
@@ -333,6 +369,7 @@ def play_network_host():
                              "board": _serialize_board(engine)})
                 engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
                 engine.switch_player()
+                save_path = save_game(engine, "lan", game_name, save_path)
                 server.send({"type": "no_moves", "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
                 time.sleep(2)
@@ -358,6 +395,7 @@ def play_network_host():
                 chosen_piece = next(p for p in valid_moves if p.identifier == piece_id)
 
             engine.execute_move(chosen_piece, roll)
+            save_path = save_game(engine, "lan", save_path)
 
             # Push result to client
             if engine.winner:
@@ -368,6 +406,7 @@ def play_network_host():
                 server.send({"type": "state", "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
 
+        delete_save(save_path)
         ui.draw()
         print(f"\nGame Over! {engine.winner.name} took the crown!")
 
@@ -395,6 +434,17 @@ def play_network_client(host_ip: str):
     p2 = Player("You", P2_PATH, "●")
     engine = Engine(p1, p2)
     ui = BoardVisualizer(engine, local_player=p2)
+
+    # First message is always either "new_game" or "restore"
+    init = client.recv()
+    if init["type"] == "restore":
+        _apply_board(engine, init["board"])
+        engine.last_action = init["last_action"]
+        engine.current_idx = init["current_idx"]
+        ui.draw()
+        print(f"Last action: {engine.last_action}")
+        print(f"\n{C_P1}Resuming saved game...{C_RESET}")
+        time.sleep(1)
 
     try:
         while True:
@@ -447,15 +497,42 @@ def play_network_client(host_ip: str):
     input("\nPress Enter to return to the main menu...")
 
 
+def _pick_local_save_menu() -> Optional[SaveFile]:
+    saves = [s for s in list_saves() if s.mode == "local"]
+    if not saves:
+        print("No local saves found.")
+        time.sleep(1.5)
+        return None
+
+    os.system('clear')
+    print(f"{C_BOLD_TEXT}=== CONTINUE GAME ==={C_RESET}\n")
+    for i, s in enumerate(saves, 1):
+        print(f"  [{i}] {s}")
+    print(f"\n  [0] Back\n")
+
+    while True:
+        raw = input("Select a save: ").strip()
+        if raw == '0':
+            return None
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(saves):
+                return saves[idx]
+        except ValueError:
+            pass
+        print("Invalid choice.")
+
+
 def main_menu():
     while True:
         os.system('clear')
         print(f"{C_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}\n")
         print("  [1] Play vs Bot")
-        print("  [2] Host Multiplayer Game")
-        print("  [3] Join Multiplayer Game")
-        print("  [4] How to Play (Tutorial)")
-        print("  [5] Exit\n")
+        print("  [2] Continue vs Bot")
+        print("  [3] Host Multiplayer Game")
+        print("  [4] Join Multiplayer Game")
+        print("  [5] How to Play (Tutorial)")
+        print("  [6] Exit\n")
 
         choice = input("Select an option: ")
 
@@ -464,8 +541,14 @@ def main_menu():
             if bot:
                 play_game(bot)
         elif choice == '2':
-            play_network_host()
+            save = _pick_local_save_menu()
+            if save:
+                bot = select_bot_menu()
+                if bot:
+                    play_game(bot, save=save)
         elif choice == '3':
+            play_network_host()
+        elif choice == '4':
             os.system('clear')
             print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
             last_ip = _load_session().get("last_ip", "")
@@ -474,9 +557,9 @@ def main_menu():
             if host_ip:
                 _save_session({"last_ip": host_ip})
                 play_network_client(host_ip)
-        elif choice == '4':
+        elif choice == '5':
             show_tutorial()
-        elif choice == '5' or choice == "exit":
+        elif choice == '6' or choice == "exit":
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit()
 
