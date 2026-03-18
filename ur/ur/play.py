@@ -335,7 +335,7 @@ def play_network_host():
                 engine.switch_player()
                 server.send({"type": "no_moves", "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
-                time.sleep(1)
+                time.sleep(2)
                 continue
 
             if engine.current_player == p1:
