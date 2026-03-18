@@ -309,17 +309,19 @@ def play_network_host():
             _animate_dice(turn_text, player_color, roll)
 
             if not valid_moves:
+                server.send({"type": "rolling", "roll": roll,
+                             "board": _serialize_board(engine)})
                 engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
                 engine.switch_player()
-                # Notify client
-                server.send({"type": "no_moves", "roll": roll, "whose_turn": "opponent",
-                             "last_action": engine.last_action,
+                server.send({"type": "no_moves", "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
                 time.sleep(1)
                 continue
 
             if engine.current_player == p1:
-                # Host's turn — pick locally
+                # Notify client of the roll so they can animate before seeing the result
+                server.send({"type": "rolling", "roll": roll,
+                             "board": _serialize_board(engine)})
                 chosen_piece = _get_human_move(valid_moves, roll, p2, "Opponent")
             else:
                 # Client's turn — ask client
@@ -337,13 +339,13 @@ def play_network_host():
 
             engine.execute_move(chosen_piece, roll)
 
-            # After every move push the updated board to the client
+            # Push result to client
             if engine.winner:
                 server.send({"type": "game_over", "winner": engine.winner.name,
                              "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
             else:
-                server.send({"type": "state", "roll": roll, "last_action": engine.last_action,
+                server.send({"type": "state", "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
 
         ui.draw()
@@ -375,12 +377,19 @@ def play_network_client(host_ip: str):
         while True:
             msg = client.recv()
 
-            if msg["type"] in ("state", "no_moves"):
+            if msg["type"] == "rolling":
+                # Show current board + animate the opponent's roll
+                _apply_board(engine, msg["board"])
+                ui.draw()
+                print(f"Last action: {engine.last_action}")
+                _animate_dice("Opponent's", C_P2, msg["roll"])
+
+            elif msg["type"] in ("state", "no_moves"):
+                # Show the result of the opponent's move
                 _apply_board(engine, msg["board"])
                 engine.last_action = msg["last_action"]
                 ui.draw()
                 print(f"Last action: {engine.last_action}")
-                _animate_dice("Opponent's", C_P2, msg["roll"])
                 time.sleep(1.2)
 
             elif msg["type"] == "your_turn":
