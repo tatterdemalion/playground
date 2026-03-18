@@ -112,6 +112,70 @@ class BoardVisualizer:
         return NUM_CIRCLES[piece.identifier]
 
 
+def _animate_dice(turn_text: str, player_color: str, roll: int):
+    for _ in range(12):
+        random_dots = " ".join(random.choice(["●", "○"]) for _ in range(4))
+        sys.stdout.write(f"\r{turn_text} turn. Rolling...  [{player_color}{random_dots}{C_RESET}]")
+        sys.stdout.flush()
+        time.sleep(0.06)
+
+    final_faces = ["●"] * roll + ["○"] * (4 - roll)
+    random.shuffle(final_faces)
+    final_str = " ".join(final_faces)
+    sys.stdout.write(f"\r{turn_text} turn. Rolled {roll}! [{player_color}{final_str}{C_RESET}]" + " " * 10 + "\n\n")
+    sys.stdout.flush()
+
+
+def _build_move_hints(piece: Piece, roll: int, p1: Player, p2: Player, bot_name: str) -> str:
+    target = piece.progress + roll
+    target_coord = p1.path[target]
+    hints = []
+
+    if target == 15:
+        hints.append(f"{C_ROSETTA}Scores a point!{C_RESET}")
+    elif target_coord in ROSETTAS:
+        hints.append(f"{C_ROSETTA}Lands on Rosetta (Roll again!){C_RESET}")
+
+    for opp_piece in p2.pieces:
+        if opp_piece.is_available and opp_piece.coord == target_coord:
+            hints.append(f"{C_P2}Captures {bot_name}'s piece!{C_RESET}")
+
+    return f" — {' '.join(hints)}" if hints else ""
+
+
+def _get_human_move(valid_moves: list[Piece], roll: int, p1: Player, p2: Player, bot_name: str) -> Piece:
+    print("Your options:")
+    valid_moves.sort(key=lambda p: p.identifier)
+
+    for piece in valid_moves:
+        target = piece.progress + roll
+        status = "Off-board" if piece.progress == 0 else f"Square {piece.progress}"
+        hint_text = _build_move_hints(piece, roll, p1, p2, bot_name)
+        print(f"  {C_P1}{NUM_CIRCLES[piece.identifier]}{C_RESET} : {status} -> Square {target}{hint_text}")
+
+    while True:
+        raw_input = input("\nSelect a piece to move (1-7): ")
+        if raw_input == "exit":
+            sys.exit()
+        try:
+            choice = int(raw_input)
+            chosen = next((p for p in valid_moves if p.identifier == choice), None)
+            if chosen:
+                return chosen
+            print("Invalid choice. That piece cannot move right now.")
+        except ValueError:
+            print("Please enter a valid piece number.")
+
+
+def _get_bot_move(bot: Bot, engine: Engine, valid_moves: list[Piece], roll: int) -> Piece:
+    state = {
+        "my_pieces": sorted([p.progress for p in engine.current_player.pieces]),
+        "opp_pieces": sorted([p.progress for p in engine.opponent.pieces]),
+        "current_roll": roll,
+    }
+    return bot.choose_move(state, valid_moves, engine.current_player)
+
+
 def play_game(bot: Bot):
     p1 = Player("You", P1_PATH, "●")
     p2 = Player(bot.name, P2_PATH, "●")
@@ -126,23 +190,9 @@ def play_game(bot: Bot):
         ui.draw()
         print(f"Last action: {engine.last_action}")
 
-        # --- DICE ANIMATION ---
         player_color = C_P1 if engine.current_player == p1 else C_P2
-        turn_text = "Your" if engine.current_player.name == "You" else f"{engine.current_player.name}'s"
-
-        for _ in range(12):
-            random_dots = " ".join(random.choice(["●", "○"]) for _ in range(4))
-            sys.stdout.write(f"\r{turn_text} turn. Rolling...  [{player_color}{random_dots}{C_RESET}]")
-            sys.stdout.flush()
-            time.sleep(0.06)
-
-        final_faces = ["●"] * roll + ["○"] * (4 - roll)
-        random.shuffle(final_faces)
-        final_str = " ".join(final_faces)
-
-        sys.stdout.write(f"\r{turn_text} turn. Rolled {roll}! [{player_color}{final_str}{C_RESET}]" + " " * 10 + "\n\n")
-        sys.stdout.flush()
-        # ----------------------
+        turn_text = "Your" if engine.current_player == p1 else f"{engine.current_player.name}'s"
+        _animate_dice(turn_text, player_color, roll)
 
         if not valid_moves:
             print("No valid moves. Turn skipped.")
@@ -152,56 +202,13 @@ def play_game(bot: Bot):
             continue
 
         if engine.current_player == p1:
-            print("Your options:")
-
-            valid_moves.sort(key=lambda p: p.identifier)
-
-            for piece in valid_moves:
-                target = piece.progress + roll
-                target_coord = p1.path[target]
-                status = "Off-board" if piece.progress == 0 else f"Square {piece.progress}"
-
-                hints = []
-                if target == 15:
-                    hints.append(f"{C_ROSETTA}Scores a point!{C_RESET}")
-                elif target_coord in ROSETTAS:
-                    hints.append(f"{C_ROSETTA}Lands on Rosetta (Roll again!){C_RESET}")
-
-                for opp_piece in p2.pieces:
-                    if opp_piece.is_available and opp_piece.coord == target_coord:
-                        hints.append(f"{C_P2}Captures {bot.name}'s piece!{C_RESET}")
-
-                hint_text = f" — {' '.join(hints)}" if hints else ""
-
-                print(f"  {C_P1}{NUM_CIRCLES[piece.identifier]}{C_RESET} : {status} -> Square {target}{hint_text}")
-
-            chosen_piece = None
-            while chosen_piece is None:
-                raw_input = input("\nSelect a piece to move (1-7): ")
-                if raw_input == "exit":
-                    sys.exit()
-
-                try:
-                    choice = int(raw_input)
-                    # Match the user's input directly to the piece's permanent ID
-                    chosen_piece = next((p for p in valid_moves if p.identifier == choice), None)
-                    if not chosen_piece:
-                        print("Invalid choice. That piece cannot move right now.")
-                except ValueError:
-                    print("Please enter a valid piece number.")
-
-            engine.execute_move(chosen_piece, roll)
-
+            chosen_piece = _get_human_move(valid_moves, roll, p1, p2, bot.name)
         else:
             time.sleep(1.2)
-            state = {
-                "my_pieces": sorted([p.progress for p in engine.current_player.pieces]),
-                "opp_pieces": sorted([p.progress for p in engine.opponent.pieces]),
-                "current_roll": roll
-            }
-            chosen_piece = bot.choose_move(state, valid_moves, engine.current_player)
-            engine.execute_move(chosen_piece, roll)
+            chosen_piece = _get_bot_move(bot, engine, valid_moves, roll)
             time.sleep(1.2)
+
+        engine.execute_move(chosen_piece, roll)
 
     ui.draw()
     print(f"\nGame Over! {engine.winner} took the crown!")
