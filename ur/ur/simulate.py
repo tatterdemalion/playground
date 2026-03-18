@@ -1,8 +1,32 @@
 import time
 import argparse
+from dataclasses import dataclass
 from ur.ai.environment import UrEnvironment
 from ur.ai import bots
 from ur.play import BoardVisualizer
+
+
+@dataclass
+class BotStats:
+    name: str
+    games_played: int = 0
+    wins: int = 0
+    total_turns: int = 0
+
+    @property
+    def win_rate(self) -> float:
+        return (self.wins / self.games_played * 100) if self.games_played > 0 else 0.0
+
+    @property
+    def avg_turns(self) -> float:
+        return (self.total_turns / self.wins) if self.wins > 0 else 0.0
+
+    def __str__(self) -> str:
+        return (
+            f"{self.name}: {self.wins}/{self.games_played} wins "
+            f"({self.win_rate:.1f}%) | "
+            f"Avg turns when winning: {self.avg_turns:.0f}"
+        )
 
 
 def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
@@ -18,8 +42,8 @@ def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
         name_a, name_b = f"{name_a}_1", f"{name_b}_2"
 
     results = {
-        name_a: {"wins": 0, "total_turns": 0},
-        name_b: {"wins": 0, "total_turns": 0}
+        name_a: BotStats(name=name_a),
+        name_b: BotStats(name=name_b),
     }
 
     start_time = time.time()
@@ -36,10 +60,8 @@ def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
             p1_name, p1_bot = name_b, bot_b
             p2_name, p2_bot = name_a, bot_a
 
-        # Pass the names cleanly into the environment
         state, valid_moves, done, _ = env.reset(p1_name, p2_name)
 
-        # Map the active bots to the player index
         players = {0: p1_bot, 1: p2_bot}
 
         ui = BoardVisualizer(env.game) if show else None
@@ -60,25 +82,23 @@ def run_simulation(bot_class_1, bot_class_2, num_games=1000, show=False):
 
             if show:
                 ui.draw()
-                time.sleep(0.1)  # Brief pause for animation
+                time.sleep(0.1)
 
-        # --- BUG FIXED HERE ---
         winner_idx = 0 if env.game.players[0].has_won() else 1
-        winner_name = env.game.players[winner_idx].name  # Ask the engine!
+        winner_name = env.game.players[winner_idx].name
 
-        results[winner_name]["wins"] += 1
-        results[winner_name]["total_turns"] += turns
+        results[name_a].games_played += 1
+        results[name_b].games_played += 1
+        results[winner_name].wins += 1
+        results[winner_name].total_turns += turns
 
     # Print Report only if we aren't using the visualizer
     if not show:
         elapsed = time.time() - start_time
         print("\n=== SIMULATION RESULTS ===")
         print(f"Games Played: {num_games} (in {elapsed:.2f} seconds)")
-
-        for bot_name, stats in results.items():
-            win_rate = (stats["wins"] / num_games) * 100
-            avg_turns = stats["total_turns"] / max(1, stats["wins"]) if stats["wins"] > 0 else 0
-            print(f"{bot_name}: {stats['wins']} wins ({win_rate:.1f}%) | Avg turns when winning: {avg_turns:.0f}")
+        for stats in results.values():
+            print(stats)
 
 
 if __name__ == "__main__":
