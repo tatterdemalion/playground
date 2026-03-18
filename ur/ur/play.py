@@ -312,7 +312,7 @@ def play_network_host():
                 engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
                 engine.switch_player()
                 # Notify client
-                server.send({"type": "no_moves", "roll": roll,
+                server.send({"type": "no_moves", "roll": roll, "whose_turn": "opponent",
                              "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
                 time.sleep(1)
@@ -343,7 +343,7 @@ def play_network_host():
                              "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
             else:
-                server.send({"type": "state", "last_action": engine.last_action,
+                server.send({"type": "state", "roll": roll, "last_action": engine.last_action,
                              "board": _serialize_board(engine)})
 
         ui.draw()
@@ -380,6 +380,7 @@ def play_network_client(host_ip: str):
                 engine.last_action = msg["last_action"]
                 ui.draw()
                 print(f"Last action: {engine.last_action}")
+                _animate_dice("Opponent's", C_P2, msg["roll"])
                 time.sleep(1.2)
 
             elif msg["type"] == "your_turn":
@@ -393,7 +394,7 @@ def play_network_client(host_ip: str):
 
                 ui.draw()
                 print(f"Last action: {engine.last_action}")
-                _animate_dice("Your", C_P2, roll)
+                _animate_dice("Your", C_P1, roll)
 
                 chosen_piece = _get_human_move(valid_moves, roll, p1, "Host")
                 client.send({"type": "move", "piece_id": chosen_piece.identifier})
