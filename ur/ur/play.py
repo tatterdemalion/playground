@@ -2,8 +2,10 @@ import os
 import sys
 import time
 import random
+import socket
 from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS
 from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
+from ur.network import Server, Client, PORT
 
 # --- ANSI COLOR CODES ---
 C_RESET = "\033[0m"        # Resets terminal color back to default
@@ -228,13 +230,178 @@ def show_tutorial():
     input("Press Enter to return to the main menu...")
 
 
+def _serialize_board(engine: Engine) -> dict:
+    """Pack just enough state for the client to redraw its board."""
+    stats = engine.get_stats()
+    return {
+        "p1_pieces": {str(p.identifier): p.progress for p in engine.p1.pieces},
+        "p2_pieces": {str(p.identifier): p.progress for p in engine.p2.pieces},
+        "stats": {
+            "p1_score": stats.p1_score, "p1_waiting": stats.p1_waiting,
+            "p2_score": stats.p2_score, "p2_waiting": stats.p2_waiting,
+        },
+    }
+
+
+def _apply_board(engine: Engine, board: dict):
+    """Overwrite piece progress on the client side from a received board snapshot."""
+    for piece in engine.p1.pieces:
+        piece.progress = board["p1_pieces"][str(piece.identifier)]
+    for piece in engine.p2.pieces:
+        piece.progress = board["p2_pieces"][str(piece.identifier)]
+
+
+def play_network_host():
+    """Host a game: you are P1, the remote player is P2."""
+    server = Server()
+    server.start()
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+    os.system("clear")
+    print(f"{C_BOLD_TEXT}=== HOST GAME ==={C_RESET}\n")
+    print(f"Your IP address : {C_P1}{local_ip}{C_RESET}")
+    print(f"Listening on port {PORT}...")
+    print("\nWaiting for opponent to connect...\n")
+
+    client_ip = server.wait_for_client()
+    print(f"Opponent connected from {client_ip}!\n")
+    time.sleep(1)
+
+    p1 = Player("You", P1_PATH, "●")
+    p2 = Player("Opponent", P2_PATH, "●")
+    engine = Engine(p1, p2)
+    ui = BoardVisualizer(engine)
+
+    try:
+        while not engine.winner:
+            roll = engine.roll_dice()
+            valid_moves = engine.get_valid_moves(roll)
+
+            ui.draw()
+            print(f"Last action: {engine.last_action}")
+
+            player_color = C_P1 if engine.current_player == p1 else C_P2
+            turn_text = "Your" if engine.current_player == p1 else "Opponent's"
+            _animate_dice(turn_text, player_color, roll)
+
+            if not valid_moves:
+                engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
+                engine.switch_player()
+                # Notify client
+                server.send({"type": "no_moves", "roll": roll,
+                             "last_action": engine.last_action,
+                             "board": _serialize_board(engine)})
+                time.sleep(1)
+                continue
+
+            if engine.current_player == p1:
+                # Host's turn — pick locally
+                chosen_piece = _get_human_move(valid_moves, roll, p2, "Opponent")
+            else:
+                # Client's turn — ask client
+                server.send({
+                    "type": "your_turn",
+                    "roll": roll,
+                    "valid_moves": [p.identifier for p in valid_moves],
+                    "last_action": engine.last_action,
+                    "board": _serialize_board(engine),
+                })
+                print("Waiting for opponent to move...")
+                msg = server.recv()
+                piece_id = msg["piece_id"]
+                chosen_piece = next(p for p in valid_moves if p.identifier == piece_id)
+
+            engine.execute_move(chosen_piece, roll)
+
+            # After every move push the updated board to the client
+            if engine.winner:
+                server.send({"type": "game_over", "winner": engine.winner.name,
+                             "last_action": engine.last_action,
+                             "board": _serialize_board(engine)})
+            else:
+                server.send({"type": "state", "last_action": engine.last_action,
+                             "board": _serialize_board(engine)})
+
+        ui.draw()
+        print(f"\nGame Over! {engine.winner.name} took the crown!")
+
+    finally:
+        server.close()
+
+    input("\nPress Enter to return to the main menu...")
+
+
+def play_network_client(host_ip: str):
+    """Join a game: you are P2, the host is P1."""
+    client = Client(host_ip)
+
+    os.system("clear")
+    print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
+    print(f"Connecting to {host_ip}:{PORT}...")
+    client.connect()
+    print("Connected!\n")
+    time.sleep(1)
+
+    p1 = Player("Host", P1_PATH, "●")
+    p2 = Player("You", P2_PATH, "●")
+    engine = Engine(p1, p2)
+    ui = BoardVisualizer(engine)
+
+    try:
+        while True:
+            msg = client.recv()
+
+            if msg["type"] in ("state", "no_moves"):
+                _apply_board(engine, msg["board"])
+                engine.last_action = msg["last_action"]
+                ui.draw()
+                print(f"Last action: {engine.last_action}")
+                time.sleep(1.2)
+
+            elif msg["type"] == "your_turn":
+                _apply_board(engine, msg["board"])
+                engine.last_action = msg["last_action"]
+                roll = msg["roll"]
+
+                # Rebuild valid_moves list from piece IDs
+                valid_move_ids = set(msg["valid_moves"])
+                valid_moves = [p for p in p2.pieces if p.identifier in valid_move_ids]
+
+                ui.draw()
+                print(f"Last action: {engine.last_action}")
+                _animate_dice("Your", C_P2, roll)
+
+                chosen_piece = _get_human_move(valid_moves, roll, p1, "Host")
+                client.send({"type": "move", "piece_id": chosen_piece.identifier})
+
+            elif msg["type"] == "game_over":
+                _apply_board(engine, msg["board"])
+                engine.last_action = msg["last_action"]
+                ui.draw()
+                print(f"\nGame Over! {msg['winner']} took the crown!")
+                break
+
+    finally:
+        client.close()
+
+    input("\nPress Enter to return to the main menu...")
+
+
 def main_menu():
     while True:
         os.system('clear')
         print(f"{C_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}\n")
-        print("  [1] Play Game")
-        print("  [2] How to Play (Tutorial)")
-        print("  [3] Exit\n")
+        print("  [1] Play vs Bot")
+        print("  [2] Host Multiplayer Game")
+        print("  [3] Join Multiplayer Game")
+        print("  [4] How to Play (Tutorial)")
+        print("  [5] Exit\n")
 
         choice = input("Select an option: ")
 
@@ -242,11 +409,17 @@ def main_menu():
             bot = select_bot_menu()
             if bot:
                 play_game(bot)
-            else:
-                main_menu()
         elif choice == '2':
+            play_network_host()
+        elif choice == '3':
+            os.system('clear')
+            print(f"{C_BOLD_TEXT}=== JOIN GAME ==={C_RESET}\n")
+            host_ip = input("Enter host IP address: ").strip()
+            if host_ip:
+                play_network_client(host_ip)
+        elif choice == '4':
             show_tutorial()
-        elif choice == '3' or choice == "exit":
+        elif choice == '5' or choice == "exit":
             os.system('cls' if os.name == 'nt' else 'clear')
             sys.exit()
 
