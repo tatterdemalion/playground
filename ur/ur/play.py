@@ -3,7 +3,8 @@ import sys
 import time
 import random
 import socket
-from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS
+from typing import Optional
+from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS, FINISH
 from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
 from ur.network import Server, Client, PORT
 
@@ -37,38 +38,51 @@ def clear():
 
 
 class BoardVisualizer:
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, local_player: Optional[Player] = None):
         self.engine = engine
         self.p1, self.p2 = self.engine.players
+        # local_player determines who is drawn at the bottom in cyan.
+        # Defaults to p1 (host/single-player perspective).
+        self._local = local_player if local_player is not None else self.p1
+
+    @property
+    def _bottom(self) -> Player:
+        return self._local
+
+    @property
+    def _top(self) -> Player:
+        return self.p2 if self._local is self.p1 else self.p1
 
     def draw(self):
         clear()
 
-        stats = self.engine.get_stats()
         cells = self._get_cells()
 
-        # Create strings for waiting pieces
-        p2_waiting_line = f"{C_P2}{' ●' * stats.p2_waiting}{C_RESET}"
+        bottom, top = self._bottom, self._top
 
-        # Human waiting line (Always draws the specific piece's permanent number!)
-        p1_waiting_line = " ".join([
+        bottom_score = sum(1 for p in bottom.pieces if p.progress == FINISH)
+        top_score    = sum(1 for p in top.pieces    if p.progress == FINISH)
+        top_waiting  = sum(1 for p in top.pieces    if p.progress == 0)
+
+        top_waiting_line    = f"{C_P2}{' ●' * top_waiting}{C_RESET}"
+        bottom_waiting_line = " ".join([
             f"{C_P1}{self._numbered_piece(piece)}{C_RESET}"
-            for piece in self.p1.pieces if piece.progress == 0
+            for piece in bottom.pieces if piece.progress == 0
         ])
 
-        p2_line = f"{C_P2} {self.p2.name} {stats.p2_score * '●'} {C_RESET}"
-        p1_line = f"{C_P1} {self.p1.name} {stats.p1_score * '●'} {C_RESET}"
+        top_line    = f"{C_P2} {top.name} {top_score * '●'} {C_RESET}"
+        bottom_line = f"{C_P1} {bottom.name} {bottom_score * '●'} {C_RESET}"
 
         board = TEMPLATE.format(**cells)
 
         game_screen = f"""
 {C_BOLD_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}
 
-        {p2_line}
-        {p2_waiting_line}
+        {top_line}
+        {top_waiting_line}
 {C_BOARD}{board}{C_RESET}
-         {p1_waiting_line}
-        {p1_line}
+         {bottom_waiting_line}
+        {bottom_line}
         """
         print(game_screen)
 
@@ -82,10 +96,14 @@ class BoardVisualizer:
         This allows the TEMPLATE string in the source code to be a visually
         perfect 1:1 representation of the final printed board.
         """
+        bottom, top = self._bottom, self._top
         cells = {}
         letter_code = 97  # ASCII code for 'a'
 
-        for r in range(BOARD_ROWS):
+        # When local player is P2 (row 0), flip rows so their lane appears at bottom
+        row_order = range(BOARD_ROWS - 1, -1, -1) if self._local is self.p2 else range(BOARD_ROWS)
+
+        for r in row_order:
             for c in range(BOARD_COLUMNS):
                 coord = (r, c)
                 if coord in MISSING_CELLS: continue
@@ -96,11 +114,11 @@ class BoardVisualizer:
                 if coord in ROSETTAS:
                     content = f"{C_ROSETTA}✿{C_BOARD}"
 
-                for piece in self.p2.pieces:
+                for piece in top.pieces:
                     if piece.is_available and piece.coord == coord:
                         content = f"{C_P2}●{C_BOARD}"
 
-                for piece in self.p1.pieces:
+                for piece in bottom.pieces:
                     if piece.is_available and piece.coord == coord:
                         content = f"{C_P1}{self._numbered_piece(piece)}{C_BOARD}"
 
@@ -351,7 +369,7 @@ def play_network_client(host_ip: str):
     p1 = Player("Host", P1_PATH, "●")
     p2 = Player("You", P2_PATH, "●")
     engine = Engine(p1, p2)
-    ui = BoardVisualizer(engine)
+    ui = BoardVisualizer(engine, local_player=p2)
 
     try:
         while True:
