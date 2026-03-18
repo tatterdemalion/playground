@@ -2,14 +2,22 @@ import random
 from ur.game import Player, Piece, ROSETTAS
 
 class Bot:
+    name = "Bot"
+
     def choose_move(self, state: dict, valid_moves: list, player: Player) -> Piece:
         raise NotImplementedError("Bots must implement their own logic!")
 
+
 class RandomBot(Bot):
+    name = "RandomBot"
+
     def choose_move(self, state: dict, valid_moves: list, player: Player):
         return random.choice(valid_moves)
 
+
 class GreedyBot(Bot):
+    name = "GreedyBot"
+
     def choose_move(self, state: dict, valid_moves: list, player: Player):
         best_move = valid_moves[0]
         best_score = -1
@@ -40,6 +48,8 @@ class GreedyBot(Bot):
 
 
 class StrategicBot(Bot):
+    name = "StrategicBot"
+
     def choose_move(self, state: dict, valid_moves: list, player: Player):
         best_move = valid_moves[0]
         best_score = -float('inf')

@@ -2,107 +2,133 @@ import os
 import sys
 import time
 import random
-from ur.game import Player, Engine, P1_PATH, P2_PATH, ROSETTAS
-from ur.ai.bots import RandomBot, GreedyBot, StrategicBot
+from dataclasses import dataclass
+from ur.game import Player, Piece, Engine, P1_PATH, P2_PATH, ROSETTAS
+from ur.ai.bots import Bot, RandomBot, GreedyBot, StrategicBot
 
 # --- ANSI COLOR CODES ---
-C_RESET = '\033[0m'       # Resets terminal color back to default
-C_BOARD = '\033[90m'      # Dark Gray for drawing the grid lines of the board
-C_P1 = '\033[96m'         # Bright Cyan for Player 1 (You) and your pieces
-C_P2 = '\033[91m'         # Bright Red for Player 2 (The Bot) and its pieces
-C_ROSETTA = '\033[93m'    # Bright Yellow for Rosetta squares (✿) and point alerts
-C_TEXT = '\033[97m'       # Bright White for headers, menus, and general UI text
+C_RESET = "\033[0m"        # Resets terminal color back to default
+C_BOARD = "\033[90m"       # Dark Gray for drawing the grid lines of the board
+C_P1 = "\033[96m"          # Bright Cyan for Player 1 (You) and your pieces
+C_P2 = "\033[91m"          # Bright Red for Player 2 (The Bot) and its pieces
+C_ROSETTA = "\033[93m"     # Bright Yellow for Rosetta squares (✿) and point alerts
+C_BOLD_TEXT = '\033[1;97m' # 1 for Bold, 97 for Bright White
+C_TEXT = "\033[97m"        # Bright White for headers, menus, and general UI text
 
 NUM_CIRCLES = {1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤", 6: "⑥", 7: "⑦"}
+BOARD_ROWS = 3
+BOARD_COLUMNS = 8
+MISSING_CELLS = ((0, 4), (0, 5), (2, 4), (2, 5))
+
+TEMPLATE = """\
+╔═══╦═══╦═══╦═══╗       ╔═══╦═══╗
+║ {c00} ║ {c01} ║ {c02} ║ {c03} ║       ║ {c06} ║ {c07} ║
+╠═══╬═══╬═══╬═══╬═══╦═══╬═══╬═══╣
+║ {c10} ║ {c11} ║ {c12} ║ {c13} ║ {c14} ║ {c15} ║ {c16} ║ {c17} ║
+╠═══╬═══╬═══╬═══╬═══╩═══╬═══╬═══╣
+║ {c20} ║ {c21} ║ {c22} ║ {c23} ║       ║ {c26} ║ {c27} ║
+╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝\
+"""
+
+
+@dataclass
+class Stats:
+    p1_score: int
+    p2_waiting: int
+    p2_score: int
+
+
+def clear():
+    os.system("clear")
 
 
 class BoardVisualizer:
     def __init__(self, engine: Engine):
         self.engine = engine
+        self.p1, self.p2 = self.engine.players
 
     def draw(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-        p1, p2 = self.engine.players[0], self.engine.players[1]
+        clear()
 
-        # Tally pieces
-        p1_score = sum(1 for p in p1.pieces if p.progress == 15)
-        p2_waiting = sum(1 for p in p2.pieces if p.progress == 0)
-        p2_score = sum(1 for p in p2.pieces if p.progress == 15)
+        stats = self._get_stats()
+        cells = self._get_cells()
 
         # Create strings for waiting pieces
-        p2_waiting_line = f"{C_P2}{' ●' * p2_waiting}{C_RESET}"
+        p2_waiting_line = f"{C_P2}{' ●' * stats.p2_waiting}{C_RESET}"
 
         # Human waiting line (Always draws the specific piece's permanent number!)
-        p1_waiting_chars = []
-        for piece in p1.pieces:
-            if piece.progress == 0:
-                p_id = piece.identifier + 1
-                p1_waiting_chars.append(f"{C_P1}{NUM_CIRCLES[p_id]}{C_RESET}")
-        p1_waiting_line = "      " + " ".join(p1_waiting_chars)
+        p1_waiting_line = " ".join([
+            f"{C_P1}{self._numbered_piece(piece)}{C_RESET}"
+            for piece in self.p1.pieces if piece.progress == 0
+        ])
 
+        p2_line = f"{C_P2} {self.p2.name} {stats.p2_score * '●'} {C_RESET}"
+        p1_line = f"{C_P1} {self.p1.name} {stats.p1_score * '●'} {C_RESET}"
+
+        board = TEMPLATE.format(**cells)
+
+        game_screen = f"""
+{C_BOLD_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}
+
+        {p2_line}
+        {p2_waiting_line}
+{C_BOARD}{board}{C_RESET}
+         {p1_waiting_line}
+        {p1_line}
+        """
+        print(game_screen)
+
+    def _get_stats(self) -> Stats:
+        return Stats(
+            p1_score=sum(1 for p in self.p1.pieces if p.progress >= 15),
+            p2_waiting=sum(1 for p in self.p2.pieces if p.progress == 0),
+            p2_score=sum(1 for p in self.p2.pieces if p.progress >= 15),
+        )
+
+    def _get_cells(self) -> dict[str, str]:
         cells = {}
-        for r in range(3):
-            for c in range(8):
-                if r in (0, 2) and c in (4, 5): continue
+        for r in range(BOARD_ROWS):
+            for c in range(BOARD_COLUMNS):
+                coord = (r, c)
+                if coord in MISSING_CELLS: continue
 
                 content = " "
-                if (r, c) in ROSETTAS:
+                if coord in ROSETTAS:
                     content = f"{C_ROSETTA}✿{C_BOARD}"
 
-                for piece in p2.pieces:
-                    if piece.is_available and piece.coord == (r, c):
+                for piece in self.p2.pieces:
+                    if piece.is_available and piece.coord == coord:
                         content = f"{C_P2}●{C_BOARD}"
 
-                for piece in p1.pieces:
-                    if piece.is_available and piece.coord == (r, c):
-                        p_id = piece.identifier + 1
-                        content = f"{C_P1}{NUM_CIRCLES[p_id]}{C_BOARD}"
+                for piece in self.p1.pieces:
+                    if piece.is_available and piece.coord == coord:
+                        content = f"{C_P1}{self._numbered_piece(piece)}{C_BOARD}"
 
                 cells[f"c{r}{c}"] = content
-        p2_header = f"      [{C_P2} {p2.name} {p2_score * '●'} {C_RESET}] "
-        p1_footer = f"      [{C_P1} {p1.name} {p1_score * '●'} {C_RESET}] "
 
-        board_ui = f"""
-{C_TEXT}=== THE ROYAL GAME OF UR ==={C_RESET}
-Last action: {self.engine.last_action}
+        return cells
 
-{p2_header}
-{p2_waiting_line}
-{C_BOARD}
-╔═══╦═══╦═══╦═══╗       ╔═══╦═══╗
-║ {cells['c00']} ║ {cells['c01']} ║ {cells['c02']} ║ {cells['c03']} ║       ║ {cells['c06']} ║ {cells['c07']} ║
-╠═══╬═══╬═══╬═══╬═══╦═══╬═══╬═══╣
-║ {cells['c10']} ║ {cells['c11']} ║ {cells['c12']} ║ {cells['c13']} ║ {cells['c14']} ║ {cells['c15']} ║ {cells['c16']} ║ {cells['c17']} ║
-╠═══╬═══╬═══╬═══╬═══╩═══╬═══╬═══╣
-║ {cells['c20']} ║ {cells['c21']} ║ {cells['c22']} ║ {cells['c23']} ║       ║ {cells['c26']} ║ {cells['c27']} ║
-╚═══╩═══╩═══╩═══╝       ╚═══╩═══╝
-{C_RESET}
-{p1_waiting_line}
-{p1_footer}
-"""
-        print(board_ui)
+    def _numbered_piece(self, piece: Piece) -> str:
+        return NUM_CIRCLES[piece.identifier]
 
 
-def play_game(bot_class):
-    bot_name = bot_class.__name__
-
+def play_game(bot: Bot):
     p1 = Player("You", P1_PATH, "●")
-    p2 = Player(bot_name, P2_PATH, "●")
+    p2 = Player(bot.name, P2_PATH, "●")
 
-    game = Engine(p1, p2)
-    ui = BoardVisualizer(game)
-    bot = bot_class()
+    engine = Engine(p1, p2)
+    ui = BoardVisualizer(engine)
 
-    while not p1.has_won() and not p2.has_won():
-        current_player = game.current_player
-        roll = game.roll_dice()
-        valid_moves = game.get_valid_moves(roll)
+    while not engine.winner:
+        roll = engine.roll_dice()
+        valid_moves = engine.get_valid_moves(roll)
 
         ui.draw()
+        print(f"Last action: {engine.last_action}")
 
         # --- DICE ANIMATION ---
-        player_color = C_P1 if current_player == p1 else C_P2
-        turn_text = "Your" if current_player.name == "You" else f"{current_player.name}'s"
+        player_color = C_P1 if engine.current_player == p1 else C_P2
+        turn_text = "Your" if engine.current_player.name == "You" else f"{engine.current_player.name}'s"
 
         for _ in range(12):
             random_dots = " ".join(random.choice(["●", "○"]) for _ in range(4))
@@ -120,19 +146,17 @@ def play_game(bot_class):
 
         if not valid_moves:
             print("No valid moves. Turn skipped.")
-            game.last_action = f"{current_player.name} rolled {roll} but had no moves."
-            game.current_idx = 1 - game.current_idx
+            engine.last_action = f"{engine.current_player.name} rolled {roll} but had no moves."
+            engine.current_idx = 1 - engine.current_idx
             time.sleep(2)
             continue
 
-        if current_player == p1:
+        if engine.current_player == p1:
             print("Your options:")
 
-            # Sort by the piece's permanent ID (1 to 7)
             valid_moves.sort(key=lambda p: p.identifier)
 
             for piece in valid_moves:
-                p_id = piece.identifier + 1
                 target = piece.progress + roll
                 target_coord = p1.path[target]
                 status = "Off-board" if piece.progress == 0 else f"Square {piece.progress}"
@@ -145,12 +169,11 @@ def play_game(bot_class):
 
                 for opp_piece in p2.pieces:
                     if opp_piece.is_available and opp_piece.coord == target_coord:
-                        hints.append(f"{C_P2}Captures {bot_name}'s piece!{C_RESET}")
+                        hints.append(f"{C_P2}Captures {bot.name}'s piece!{C_RESET}")
 
                 hint_text = f" — {' '.join(hints)}" if hints else ""
 
-                # Menu option is now exactly the Piece ID!
-                print(f"  {C_P1}{NUM_CIRCLES[p_id]}{C_RESET} : {status} -> Square {target}{hint_text}")
+                print(f"  {C_P1}{NUM_CIRCLES[piece.identifier]}{C_RESET} : {status} -> Square {target}{hint_text}")
 
             chosen_piece = None
             while chosen_piece is None:
@@ -161,28 +184,27 @@ def play_game(bot_class):
                 try:
                     choice = int(raw_input)
                     # Match the user's input directly to the piece's permanent ID
-                    chosen_piece = next((p for p in valid_moves if p.identifier + 1 == choice), None)
+                    chosen_piece = next((p for p in valid_moves if p.identifier == choice), None)
                     if not chosen_piece:
                         print("Invalid choice. That piece cannot move right now.")
                 except ValueError:
                     print("Please enter a valid piece number.")
 
-            game.execute_move(chosen_piece, roll)
+            engine.execute_move(chosen_piece, roll)
 
         else:
             time.sleep(1.2)
             state = {
-                "my_pieces": sorted([p.progress for p in current_player.pieces]),
-                "opp_pieces": sorted([p.progress for p in game.opponent.pieces]),
+                "my_pieces": sorted([p.progress for p in engine.current_player.pieces]),
+                "opp_pieces": sorted([p.progress for p in engine.opponent.pieces]),
                 "current_roll": roll
             }
-            chosen_piece = bot.choose_move(state, valid_moves, current_player)
-            game.execute_move(chosen_piece, roll)
+            chosen_piece = bot.choose_move(state, valid_moves, engine.current_player)
+            engine.execute_move(chosen_piece, roll)
             time.sleep(1.2)
 
     ui.draw()
-    winner = "You" if p1.has_won() else bot_name
-    print(f"\nGame Over! {winner} took the crown!")
+    print(f"\nGame Over! {engine.winner} took the crown!")
     input("\nPress Enter to return to the main menu...")
 
 
@@ -210,9 +232,11 @@ def main_menu():
         choice = input("Select an option: ")
 
         if choice == '1':
-            bot_class = select_bot_menu()
-            if bot_class:
-                play_game(bot_class)
+            bot = select_bot_menu()
+            if bot:
+                play_game(bot)
+            else:
+                main_menu()
         elif choice == '2':
             show_tutorial()
         elif choice == '3' or choice == "exit":
@@ -232,11 +256,11 @@ def select_bot_menu():
         choice = input("Select an opponent: ")
 
         if choice == '1':
-            return RandomBot
+            return RandomBot()
         elif choice == '2':
-            return GreedyBot
+            return GreedyBot()
         elif choice == '3':
-            return StrategicBot
+            return StrategicBot()
         elif choice == '4':
             return None
 

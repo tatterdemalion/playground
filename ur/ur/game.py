@@ -54,7 +54,7 @@ class Player:
         self.name = name
         self.path = path
         self.symbol = symbol
-        self.pieces = [Piece(i, self) for i in range(7)]
+        self.pieces = [Piece(i, self) for i in range(1, 8)]
 
     def has_won(self) -> bool:
         return all(piece.progress > FINAL_SQUARE for piece in self.pieces)
@@ -78,6 +78,13 @@ class Engine:
     @property
     def opponent(self) -> Player:
         return self.players[self.opponent_idx]
+
+    @property
+    def winner(self) -> Optional[Player]:
+        for player in self.players:
+            if player.has_won():
+                return player
+        return None
 
     def switch_player(self) -> Player:
         self.current_idx = self.opponent_idx
