@@ -323,6 +323,7 @@ def play_network_host():
             ui.draw()
             print(f"Last action: {engine.last_action}")
 
+
             player_color = C_P1 if engine.current_player == p1 else C_P2
             turn_text = "Your" if engine.current_player == p1 else "Opponent's"
             _animate_dice(turn_text, player_color, roll)
@@ -369,6 +370,9 @@ def play_network_host():
 
         ui.draw()
         print(f"\nGame Over! {engine.winner.name} took the crown!")
+
+    except (ConnectionError, OSError):
+        print(f"\n{C_P2}Opponent disconnected.{C_RESET}")
 
     finally:
         server.close()
@@ -433,6 +437,9 @@ def play_network_client(host_ip: str):
                 ui.draw()
                 print(f"\nGame Over! {msg['winner']} took the crown!")
                 break
+
+    except (ConnectionError, OSError):
+        print(f"\n{C_P2}Host disconnected.{C_RESET}")
 
     finally:
         client.close()
