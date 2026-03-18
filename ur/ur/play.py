@@ -331,6 +331,14 @@ def play_network_host():
     """Host a game: you are P1, the remote player is P2."""
     os.system("clear")
     print(f"{C_BOLD_TEXT}=== HOST GAME ==={C_RESET}\n")
+
+    lan_saves = [s for s in list_saves() if s.mode == "lan"]
+    if lan_saves:
+        print(f"{C_TEXT}Saved LAN games:{C_RESET}")
+        for s in lan_saves:
+            print(f"  {C_P1}{s.game_name}{C_RESET}  — saved {s.saved_at[:16]}")
+        print()
+
     print(COMMANDS_HINT)
     game_name = input("Enter a game name (or press Enter to start fresh): ").strip()
     _handle_command(game_name)
